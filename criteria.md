@@ -27,7 +27,7 @@ tool calls and returns a fit card — in at least 4 of 5 tries.
 **Why this target:**
 Two of the three tools call the model, so this path can fail for reasons my
 code doesn't control — a rate-limit retry that runs out, or a reply that comes
-back empty. My search is also a plain keyword match with a "half the keywords"
+back empty. My search is also a plain keyword match with a "two-thirds of the keywords"
 cutoff, so a phrasing like "band t-shirt" can miss listings that say "band tee".
 I'd rather allow one miss in five than claim a model-backed path never fails.
 Tested with `vintage graphic tee under $30` and the example wardrobe, the

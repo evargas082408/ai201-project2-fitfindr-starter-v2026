@@ -162,7 +162,9 @@ def search_listings(
     terms = [w for w in _words(description or "") if w not in _STOPWORDS]
     if not terms:
         return []
-    needed = max(1, math.ceil(len(terms) / 2))
+    # Two-thirds of the keywords, rounded up: "leather bomber" needs both
+    # words, so a leather belt does not count as a bomber.
+    needed = max(1, math.ceil(len(terms) * 2 / 3))
 
     scored = []
     for listing in load_listings():
