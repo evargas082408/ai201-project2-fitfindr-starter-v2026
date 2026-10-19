@@ -111,9 +111,28 @@ wardrobe is `{"items": []}`.
 
 **Where it lives:** `agent.py::run_agent`
 
-**How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
+The loop is a `while next_step != "done"` loop in which each step sets `next_step` from what it just got back (`parse → search → select → suggest → card`, or `parse → search → explain_empty`). It calls `trace.check_iterations(count)` on every pass, so a branch that never ends hits `config.MAX_ITERATIONS` instead of spinning. The empty-search message is built by `agent.py::explain_empty`.
 
-**What moves through the session:** <!-- which fields, in what order -->
+**How the query is parsed:** Regex, in `agent.py::parse_query`, with no model call. The price comes from `under/below/less than/max/up to $N`, a bare `$N`, or `N dollars/bucks`. The size comes from `size X` / `in size X`, where X is a letter size, `small/medium/large` (read as S/M/L), a shoe number or a `W` waist. Both spans are cut out of the text, and what's left (punctuation stripped) is the description. Anything not stated is `None`. For example, `'chunky cardigan, size medium, max $40'` → `{'description': 'chunky cardigan', 'size': 'M', 'max_price': 40.0}`.
+
+**What moves through the session:** In order: `query` → `parsed` (description, size, max_price) → `search_results` (the full list) → `selected_item` (`search_results[0]`) → `outfit_suggestion` → `fit_card`. Each tool reads its inputs back out of the session, not from a local variable. I added one field, `tool_calls`, a list of `{"tool", "item_id"}` appended right before each tool runs, so criterion 3 can check that the id that reached `suggest_outfit` and `create_fit_card` is the id of `selected_item`. On the empty path, `error` is set and `selected_item`, `outfit_suggestion` and `fit_card` stay `None`.
+
+Printed session from a real run (`run_agent('denim jacket under $50', get_example_wardrobe())`, wardrobe and long fields trimmed):
+
+```
+"parsed": {"description": "denim jacket", "size": null, "max_price": 50.0},
+"selected_item": {"id": "lst_007", "title": "Denim Jacket — Light Wash, Cropped", "price": 42.0, "platform": "poshmark", ...},
+"fit_card": "Scored this vintage Wrangler denim jacket on Poshmark for just $42 and the structured shoulders are so good. I love the light wash for building easy streetwear looks. 💙 #thriftfind",
+"error": null,
+"tool_calls": [
+  {"tool": "search_listings", "item_id": null},
+  {"tool": "suggest_outfit", "item_id": "lst_007"},
+  {"tool": "create_fit_card", "item_id": "lst_007"}
+]
+search_results ids: ['lst_007']
+state check: True
+empty path ('designer ballgown size XXS under $5'): fit_card = None | outfit = None | tool_calls = [{'tool': 'search_listings', 'item_id': None}]
+```
 
 ---
 
@@ -127,26 +146,79 @@ wardrobe is `{"items": []}`.
 **One full query**
 
 ```
-$ python app.py ask '...'
+$ python app.py ask 'vintage graphic tee under $30, size M'
 
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+
+  Outfit:   Outfit 1: Y2K Baby Tee — Butterfly Print paired with Baggy straight-leg jeans, dark wash, Vintage black denim jacket, and Chunky white sneakers.
+Outfit 2: Y2K Baby Tee — Butterfly Print paired with Wide-leg khaki trousers, Black cropped zip hoodie, and Black combat boots.
+These combinations balance the fitted, cropped silhouette of the baby tee with contrasting proportions in the bottoms and outerwear, while tying the white, black, and denim color elements together cleanly.
+
+  Fit card: Scored this early 2000s butterfly tee on depop for just $18 and I'm obsessed with the fitted crop. It has the cutest vintage Y2K energy. 🦋 #thriftfind
+
+2 model calls this session, 669 prompt + 147 output tokens
+```
+
+The size filter did its job: the 2003 tour tee (size L, the top match with no size) was left out, and `S/M` matched `M`.
+
+And the empty branch, which is shorter because it stops after search:
+
+```
+$ python app.py ask 'leather bomber under $40'
+
+  Nothing matches 'leather bomber' under $40. The cheapest match is 90s Leather Bomber — Black at $75 — raise your budget to $75 to see it.
+
+0 model calls this session
+```
+
+```
+$ python app.py ask 'designer ballgown size XXS under $5'
+
+  Nothing in the listings matches 'designer ballgown' in size XXS under $5. No item matches those words at any size or price, so changing the size or budget won't help. Try other words: name the kind of item (tee, jacket, jeans, sneakers, cardigan) or a style (vintage, y2k, grunge, cottagecore, 90s).
+
+0 model calls this session
 ```
 
 **The three tools, tested one at a time**
 
 ```
 $ python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
+[{'id': 'lst_006', 'title': 'Graphic Tee — 2003 Tour Bootleg Style', 'description': 'Vintage-style bootleg tee with faded graphic. Slightly boxy fit. 100% cotton, soft and worn-in.', 'category': 'tops', 'style_tags': ['graphic tee', 'vintage', 'grunge', 'streetwear', 'band tee'], 'size': 'L', 'condition': 'good', 'price': 24.0, 'colors': ['black'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_002', 'title': 'Y2K Baby Tee — Butterfly Print', 'description': 'Super cute early 2000s baby tee with butterfly graphic. Fitted crop length. Tag says medium but fits like a small.', 'category': 'tops', 'style_tags': ['y2k', 'vintage', 'graphic tee', 'cottagecore'], 'size': 'S/M', 'condition': 'excellent', 'price': 18.0, 'colors': ['white', 'pink', 'purple'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_033', 'title': 'Vintage Band Tee — Faded Grey', 'description': 'Faded grey band-style tee with distressed graphic. Crew neck. Fits boxy. Well-loved but no holes or major damage.', 'category': 'tops', 'style_tags': ['vintage', 'grunge', 'band tee', 'graphic tee', 'streetwear'], 'size': 'L', 'condition': 'fair', 'price': 19.0, 'colors': ['grey', 'charcoal'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_017', 'title': 'Mesh Long-Sleeve Top — Black', 'description': 'Sheer black mesh long-sleeve. Great for layering under a graphic tee or over a bralette. Stretchy material, fits true to size.', 'category': 'tops', 'style_tags': ['y2k', 'grunge', 'goth', 'layering'], 'size': 'S/M', 'condition': 'excellent', 'price': 15.0, 'colors': ['black'], 'brand': None, 'platform': 'depop'}]
 
+$ python -c "from tools import search_listings; print(search_listings('designer ballgown', size='XXS', max_price=5))"
+[]
 ```
 
 ```
-$ python -c "from tools import suggest_outfit; ..."
+$ python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_example_wardrobe()))"
+Vintage Levi's 501 Jeans paired with the white ribbed tank top, vintage black denim jacket, brown leather belt, and black combat boots.
+Vintage Levi's 501 Jeans paired with the oversized grey crewneck sweatshirt, black crossbody bag, and chunky white sneakers.
 
+The straight fit of the new medium-wash jeans anchors both looks, easily pairing with cropped layers or oversized classics while working seamlessly with your existing footwear and accessories.
+
+$ python -c "from tools import suggest_outfit; from utils.data_loader import get_empty_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_empty_wardrobe()))"
+Pair these medium wash Levi's 501s with a boxy, cropped black graphic tee and worn-in canvas low-top sneakers for an effortless, casual streetwear vibe. Alternatively, dress them up slightly by adding a crisp white cotton button-down shirt tucked in loosely, layered under an oversized beige knit cardigan, and finished with brown leather loafers. The indigo blue and light knee fading work seamlessly with neutral tones like black, white, and beige, as well as muted earth tones, keeping the classic vintage aesthetic grounded and versatile.
 ```
 
 ```
-$ python -c "from tools import create_fit_card; ..."
+$ python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
+Scored these vintage Levi's 501 jeans on depop for just $38 with the best lived-in fading at the knees. I'm styling them the classic way with crisp white sneakers for that effortless streetwear look. 👖✨ #thrifted #levis
+
+$ python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(repr(create_fit_card('', load_listings()[0])))"
+"Can't write a fit card without an outfit suggestion."
+```
+
+`create_fit_card` run three times on the same item and outfit with the cache off (`AI201_CACHE=0`), to check the words actually change:
 
 ```
+Scored this bootleg graphic tee on Depop for just $24 and the vintage grunge vibe is unmatched. Tucking it into dark baggy jeans with chunky white sneakers and a black denim jacket makes the ultimate effortless streetwear fit. 🖤 #thrifted
+---
+Scored this perfectly faded graphic tee on depop for just $24. Tucked it into dark wash baggy jeans and threw on my denim jacket for the ultimate grunge street style. #thriftfind #streetwear
+---
+Scored this faded graphic tee on depop for just $24 and the worn-in 2003 tour bootleg vibe is unmatched. Tucked it into some dark wash baggy straight-leg jeans with chunky white sneakers and my favorite denim jacket for the ultimate grunge streetwear fit. 🖤 #thriftedstyle #streetwear
+```
+
+Different words every time, and all three have the price and platform, but all three open with "Scored this…". That's worth watching against criterion 4 next unit.
 
 ---
 
@@ -159,17 +231,25 @@ $ python -c "from tools import create_fit_card; ..."
      "I gave Claude my search_listings spec. It returned None on no match
      instead of an empty list, so I changed it" is the level we want. -->
 
-**Moment 1**
+The course allowed full AI use on this project. I used Claude Code as a coding agent: it read the starter and the data, wrote the specs, criteria and code with me, and ran every test above. I also used the project's own model (Gemini, through `generate()`) as the "attacker" the brief describes. Three specific moments:
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+**Moment 1: attacking the criteria**
 
-**Moment 2**
+- *What I asked for:* I sent all five criteria to the model with the brief's prompt: *"For each one, tell me exactly how you would test it using only what the sentence says. Don't suggest improvements."*
+- *What came back:* It turned all five into tests, but for criteria 1–3 its test setup was just "run a query that matches at least one listing", so it had to pick a query itself. For criterion 5 it listed query 2's expected parse as only "size M" and said nothing about the price.
+- *What I changed:* I named the exact test query under criteria 1, 2 and 3 (the ones in `scenarios.py`). I also added "with `None` for whichever one the query doesn't state" to criterion 5, because without it a parser that made up a price for `90s track jacket in size M` would still pass.
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+**Moment 2: a search that returned the wrong kind of item**
+
+- *What I asked for:* Claude Code built `search_listings` to my first spec, which kept a listing if it matched at least half of the query's keywords, then ran a batch of queries through it, each printed with its parse and results.
+- *What came back:* `leather bomber under $40` returned 2 results: a braided leather belt and a leather shoulder bag. With two keywords, "half" meant one, so "leather" alone counted as a match. The only bomber is $75, so the honest answer was "nothing".
+- *What I changed:* I raised the cutoff to two-thirds of the keywords (rounded up) in `tools.py` and in the Tool Inventory. Now that query comes back empty, and the empty branch says *"raise your budget to $75 to see it"* instead of offering a belt.
+
+**Moment 3: checking the empty-search message**
+
+- *What I asked for:* I pasted the ballgown message into the model with the brief's prompt: *"I know nothing about how the app works. Tell me what I would try next after reading it."*
+- *What came back:* Its first suggestion was right (change the words), but it also said I'd "likely need to change your size (XXS) or price (< $5)". My message had said the words matched nothing "at any size or price", and the model still didn't take from that that size and price weren't the problem.
+- *What I changed:* I rewrote that sentence in `agent.py::explain_empty` to say it outright: *"No item matches those words at any size or price, so changing the size or budget won't help."*
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
