@@ -73,24 +73,24 @@ wardrobe is `{"items": []}`.
 
 ### `search_listings`
 
-- **What it does:**
-- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" -->
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Filters the 40 listings by price ceiling and size, then ranks what's left by how many of the query's keywords appear in each listing's title, style tags, description, colors, category and brand. No model call.
+- **Inputs:** `description` (str) — keywords, e.g. `"vintage graphic tee"`; `size` (str or None) — e.g. `"M"`, `"8"`, `"W30"`, `None` skips the size filter; `max_price` (float or None) — inclusive ceiling in dollars, `None` skips the price filter.
+- **Returns:** A `list[dict]` of at most `config.SEARCH_RESULT_LIMIT` (10) full listing dicts, best match first. Each dict has `id`, `title`, `description`, `category`, `style_tags` (list), `size`, `condition`, `price` (float), `colors` (list), `brand` (str or None), `platform`. A listing is kept only if it matches at least half (rounded up) of the query's keywords. **Size rule:** the listing's size string is split into size tokens — letter sizes (`S/M` → `S`, `M`), shoe numbers (`US 8.5` → `8.5`), waists (`W30 L30` → `30`/`W30`; the `L30` inseam is *not* read as size L). The requested size matches if it equals one of those tokens exactly, so `M` matches `S/M` and `M/L` but `S` does not match `US 9` and `L` does not match `XL`. `One Size` listings match any requested size. `small`/`medium`/`large` are read as `S`/`M`/`L`.
+- **When it has nothing:** An empty list `[]` — never `None`, never an exception. That empty list is what the loop branches on.
 
 ### `suggest_outfit`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Asks the model for one or two outfits built around the new item, naming specific pieces from the user's wardrobe.
+- **Inputs:** `new_item` (dict) — one listing dict, as returned by `search_listings`; `wardrobe` (dict) — `{"items": [wardrobe item dicts]}`, where `items` may be empty.
+- **Returns:** A non-empty `str` of plain text: one or two outfits, each a short line naming the new item plus pieces from the wardrobe by their `name`, and a sentence on why they work.
+- **When it has nothing:** With an empty wardrobe (`items == []`) it still returns a non-empty `str`: general styling advice for the item (what kinds of pieces to pair it with), and it does not invent pieces the user owns. If `new_item` is empty or `None` it returns the string `"No item to style."` without calling the model.
 
 ### `create_fit_card`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Asks the model for a short, postable caption about the find and the outfit.
+- **Inputs:** `outfit` (str) — the string `suggest_outfit` returned; `new_item` (dict) — the same listing dict that went into `suggest_outfit`.
+- **Returns:** A `str` caption of 2–4 sentences, written like a social post rather than a product description, that mentions the item, its price (e.g. `$24`) and its platform once each.
+- **When it has nothing:** If `outfit` is empty or whitespace-only it returns the string `"Can't write a fit card without an outfit suggestion."` without calling the model. It never raises and never returns `""`.
 
 ---
 
@@ -107,7 +107,7 @@ wardrobe is `{"items": []}`.
      The grader checks your code against what you claim here, so the file and
      function have to be real. -->
 
-**Branch rule:**
+**Branch rule:** If `search_listings` returns an empty list, the loop does *not* call `suggest_outfit`. Instead it re-runs the search with the price ceiling removed, then with the size removed, to find out which filter emptied it; it writes a message naming that filter ("raise your budget to $38", "try size L", or "try other words") into `session["error"]` and returns the session with `outfit_suggestion` and `fit_card` still `None`. Otherwise it takes the first (best-scoring) result into `session["selected_item"]` and goes on to `suggest_outfit`, then `create_fit_card`.
 
 **Where it lives:** `agent.py::run_agent`
 
