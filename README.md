@@ -41,7 +41,21 @@
 
 <!-- Three or four sentences: what a user asks for, and what they get back. -->
 
+You type what you're hunting for in plain words — "a vintage graphic tee under
+$30, size M" — and FitFindr searches 40 thrift listings from Depop, thredUp and
+Poshmark for it, filtering on keywords, size and price. If something matches, it
+takes the best match, works out one or two outfits built from pieces already in
+your wardrobe, and writes a short caption you could actually post with the find.
+If nothing matches, it stops before the outfit step and tells you which part of
+your request to change (the budget, the size, or the words).
 
+Data notes from Milestone 1: a listing has `id`, `title`, `description`,
+`category`, `style_tags` (list), `size`, `condition`, `price` (float), `colors`
+(list), `brand` (usually `None`), and `platform`. Sizes come in four shapes:
+letters (`M`, `S/M`, `XL (oversized)`), shoe sizes (`US 8.5`), waist/inseam
+(`W30 L30`, `W28`) and `One Size`. A wardrobe is `{"items": [...]}`, each item
+with `id`, `name`, `category`, `colors`, `style_tags`, `notes`; an empty
+wardrobe is `{"items": []}`.
 
 ---
 
