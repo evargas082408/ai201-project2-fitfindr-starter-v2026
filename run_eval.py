@@ -30,6 +30,7 @@ mode — caching is what usually explains it.
 
 import argparse
 import datetime as dt
+import json
 import sys
 import traceback
 
@@ -202,6 +203,19 @@ def write_report(rows, args):
                 lines += ["Trace:", "", "```", record["trace"], "```", ""]
 
     path.write_text("\n".join(lines), encoding="utf-8")
+
+    # The sessions themselves (minus the wardrobe), so check_criteria.py can
+    # score a try field by field instead of off the markdown.
+    dump = [
+        {"scenario": row["scenario"], "tries": [
+            {"crashed": t["crashed"],
+             "session": {k: v for k, v in (t["session"] or {}).items() if k != "wardrobe"}}
+            for t in row["tries"]
+        ]}
+        for row in rows
+    ]
+    path.with_suffix(".json").write_text(
+        json.dumps(dump, indent=1, ensure_ascii=False), encoding="utf-8")
 
     import generate
 

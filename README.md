@@ -269,19 +269,76 @@ The course allowed full AI use on this project. I used Claude Code as a coding a
      `python run_eval.py --label before` runs everything and writes the table
      into results/. Paste it here and fill in the verdicts. -->
 
+`python run_eval.py --label before`, cache off, 10 scenarios × 5 tries, 90 model calls (29,082 prompt + 7,026 output tokens). Files: [results/run_2026-11-01_2344_before.md](results/run_2026-11-01_2344_before.md) (the log run_eval writes) and `.json` (every session, which I added to run_eval so I could check fields instead of reading markdown).
+
+I scored the tries with `check_criteria.py`, which is my reading of `criteria.md` written as code, one check per criterion, so the same rule hits every try in both runs. Its full output is in [results/run_2026-11-01_2344_before_scored.txt](results/run_2026-11-01_2344_before_scored.txt).
+
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. Matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. Impossible query stops before tool 2 | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. Searched item is the item every later tool gets | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Fit card is postable and not a template | 4 of 5 + 4 different first sentences | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. Query's price and size parsed and respected | 4 of 5 queries | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
-**Real output from one try**, pasted as text, naming the file and function
-that produced it:
+For criterion 5 the columns are the five queries, because the criterion is written as "4 of the 5 queries". Each query ran five times, so that's 25 runs, and a query only gets PASS if all five of its runs passed. All 25 came back identical, which is what you'd expect from regex and a filter.
+
+**Real output from one try**, per criterion:
+
+Criterion 1, try 1. The loop is `agent.py::run_agent`, the card is `tools.py::create_fit_card`:
 
 ```
+[2] search_listings (via MCP)
+      in:  description='vintage graphic tee', size=None, max_price=30.0
+      out: 6 items: Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey, Vintage Graphic Hoodie — Faded Black … +3 more
+      →    branch: 6 results → select
+...
+[5] create_fit_card
+      in:  outfit (482 chars), new_item=lst_006
+      out: Scored this 2003 tour bootleg style graphic tee for just $24 on depop and it has the absolute best worn-in gru…
+      →    done
 
+tool_calls: [{'tool': 'search_listings', 'item_id': None}, {'tool': 'suggest_outfit', 'item_id': 'lst_006'}, {'tool': 'create_fit_card', 'item_id': 'lst_006'}]
+fit_card:   Scored this 2003 tour bootleg style graphic tee for just $24 on depop and it has the absolute best worn-in grunge vibe. I've been styling it tucked into dark baggy denim with combat boots, but it looks just as good layered under a black jacket. 🖤 #streetwear
+```
+
+Criterion 2, try 1. The message is `agent.py::explain_empty`:
+
+```
+error:      Nothing in the listings matches 'designer ballgown' in size XXS under $5. No item matches those words at any size or price, so changing the size or budget won't help. Try other words: name the kind of item (tee, jacket, jeans, sneakers, cardigan) or a style (vintage, y2k, grunge, cottagecore, 90s).
+tool_calls: [{'tool': 'search_listings', 'item_id': None}]
+outfit_suggestion: None   fit_card: None
+```
+
+Criterion 3, try 1. The session from `agent.py::run_agent`, with `tool_calls` written by `agent.py::_log_call`:
+
+```
+selected_item["id"]:      lst_007
+search_results[0]["id"]:  lst_007
+tool_calls: [{'tool': 'search_listings', 'item_id': None}, {'tool': 'suggest_outfit', 'item_id': 'lst_007'}, {'tool': 'create_fit_card', 'item_id': 'lst_007'}]
+```
+
+Criterion 4, all five cards, since the criterion is about the set. From `tools.py::create_fit_card`:
+
+```
+1. Found this soft, worn-in 2003 tour bootleg tee on depop for $24 and it has the absolute best faded grunge look. I love the slightly boxy fit for throwing on with dark denim or relaxed trousers.   #thriftstyle #streetwear
+2. Scored this faded 2003 tour tee on depop for $24 and it's already my favorite piece. The boxy fit and worn-in cotton give it the ultimate grunge streetwear vibe. 🎸 #thriftfind
+3. Just scored this 2003 tour bootleg style graphic tee on Depop for $24 and the worn-in black cotton gives off the ultimate grunge vibe. I’m styling it tucked into dark baggy jeans with combat boots, then swapping to khaki trousers and a denim jacket for easy streetwear looks. 🖤 #thrifted
+4. Scored this faded graphic tee on depop for just $24. It has that perfectly worn-in, boxy grunge fit I live for. Pair it with baggy denim or crisp khakis for an effortless streetwear vibe. 🖤  #thriftedstyle #streetwear
+5. Scored this vintage-style 2003 tour tee on depop for just $24 and the worn-in black cotton has the ultimate grunge look. I’m living for the slightly boxy fit tucked into dark wash denim. 🖤 #thrifted
+
+check_criteria.py: $24 / depop / 38, 31, 50, 37, 35 words — all five PASS
+5 different first sentences; opening words: 'found this', 'scored this', 'just scored', 'scored this', 'scored this'
+```
+
+Criterion 5, try 1 of each query. `parsed` is `agent.py::parse_query`, results are `search_listings` through MCP (`mcp_server.py::search_listings`), shown as (id, price, size):
+
+```
+'vintage graphic tee under $30'         {'size': None, 'max_price': 30.0}  [('lst_006', 24.0, 'L'), ('lst_033', 19.0, 'L'), ('lst_015', 26.0, 'L'), ('lst_002', 18.0, 'S/M'), ('lst_012', 20.0, 'XL (fits oversized)'), ('lst_017', 15.0, 'S/M')]
+'90s track jacket in size M'            {'size': 'M', 'max_price': None}   [('lst_004', 45.0, 'M'), ('lst_022', 75.0, 'M')]
+'platform sneakers size 8'              {'size': '8', 'max_price': None}   [('lst_019', 48.0, 'US 8')]
+'denim jacket for less than 50 dollars' {'size': None, 'max_price': 50.0}  [('lst_007', 42.0, 'S')]
+'chunky cardigan, size medium, max $40' {'size': 'M', 'max_price': 40.0}   [('lst_008', 35.0, 'One Size / Oversized')]
 ```
 
 ---

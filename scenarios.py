@@ -35,18 +35,32 @@ SCENARIOS = [
         "wardrobe": "empty",
         "criterion": None,
     },
-    # TODO: add what your criteria 3, 4 and 5 need.
-    #
-    # Set "criterion" to the number in criteria.md that the scenario tests.
-    # "criterion": None means a diagnostic run — useful to have, but it isn't
-    # one of your five, and run_eval.py marks it as such in the table.
-    #
-    # For a state criterion, any normal query works — what you're checking is
-    # what ends up in the session, not what the user typed.
-    #
-    # For a fit-card criterion, you probably want the SAME query listed more
-    # than once, or several different items, depending on what your criterion
-    # actually says.
+    {
+        # Criterion 3 — the id search picked is the id both later tools got.
+        "name": "searched item reaches every tool",
+        "query": "denim jacket under $50",
+        "wardrobe": "example",
+        "criterion": 3,
+    },
+    {
+        # Criterion 4 — same query five times, cache off, so five real cards.
+        "name": "fit card is postable, not a template",
+        "query": "vintage graphic tee under $30",
+        "wardrobe": "example",
+        "criterion": 4,
+    },
+    # Criterion 5 is written over five queries, each stating price or size a
+    # different way. One scenario per query.
+    {"name": "parse q1: under $30", "query": "vintage graphic tee under $30",
+     "wardrobe": "example", "criterion": 5},
+    {"name": "parse q2: in size M", "query": "90s track jacket in size M",
+     "wardrobe": "example", "criterion": 5},
+    {"name": "parse q3: size 8", "query": "platform sneakers size 8",
+     "wardrobe": "example", "criterion": 5},
+    {"name": "parse q4: less than 50 dollars", "query": "denim jacket for less than 50 dollars",
+     "wardrobe": "example", "criterion": 5},
+    {"name": "parse q5: size medium, max $40", "query": "chunky cardigan, size medium, max $40",
+     "wardrobe": "example", "criterion": 5},
 ]
 
 WARDROBES = ("example", "empty")
