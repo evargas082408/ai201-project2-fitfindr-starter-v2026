@@ -524,25 +524,57 @@ full. -->
 
      `python run_eval.py --label after` -->
 
-**What I changed:**
+**What I changed:** One prompt, in `tools.py::create_fit_card`. Nothing else in the agent changed between the two runs. I added two instructions:
 
-**Which failure it was meant to fix:**
+```diff
+-  "post — not a product description. Mention the item, the price written "
+-  f"exactly as {price_text}, and the platform ({new_item.get('platform')}) "
+-  "once each. Be specific about the vibe. ..."
++  "post — not a product description. Open with the outfit or the vibe, "
++  "not with how you got it: don't start with 'Scored', 'Found', "
++  "'Snagged', 'Got' or 'Just'. Mention the item, the price written "
++  f"exactly as {price_text}, and the platform ({new_item.get('platform')}) "
++  "once each, with the price and platform in a later sentence, not the "
++  "first. Be specific about the vibe. ..."
+```
+
+**Which failure it was meant to fix:** Criterion 4 (revised), the template opener. The diagnosis said the prompt's "item + price + platform" checklist was getting packed into one stock first sentence, so the fix splits the checklist across sentences and takes away the stock verbs. I kept the price and platform instructions, because (a) and (b) of criterion 4 depend on them.
 
 ### Run Log — After
 
+`python run_eval.py --label after`, same 10 scenarios, 5 tries each, cache off, 92 model calls. Files: [results/run_2026-11-01_2355_after.md](results/run_2026-11-01_2355_after.md), `.json`, and [the scored output](results/run_2026-11-01_2355_after_scored.txt).
+
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. Matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. Impossible query stops before tool 2 | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. Searched item is the item every later tool gets | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Fit card is postable and not a template | 4 of 5 + ≤ 2 cards with the same two-word opener (revised) | PASS | PASS | PASS | PASS | PASS | MET (5/5, top opener 1 of 5) |
+| 5. Query's price and size parsed and respected | 4 of 5 queries | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
-**Did it help, and how do I know:**
+Before and after, side by side, on the thing the change was for:
 
-<!-- If it made things worse, say that. Honestly reported, that earns full
-     credit and is more interesting than one that worked. -->
+| | Before | After |
+|---|---|---|
+| Criterion 4 (revised): most common two-word opener in the 5 cards | "scored this", **3 of 5 → MISSED** | "channeling ultimate", 1 of 5 → **MET** |
+| Criterion 4 (a)–(c): `$24`, `depop`, ≤ 80 words | 5 of 5 | 5 of 5 |
+| All 45 cards in the run: most common first word | "scored", 26 of 45 | "channeling", 14 of 45 |
+| All 45 cards: the four most common first words cover | 45 of 45 | 28 of 45 |
+| All 45 cards: price in the first sentence | 45 of 45 | 0 of 45 |
 
+The five criterion-4 cards after the change:
+
+```
+1. Channeling ultimate 2000s grunge energy with this boxy graphic tee and dark wash denim. I grabbed this washed black bootleg style for $24 on depop, and the worn-in cotton makes it look authentically vintage. 🖤 #streetwear #thrifted
+2. Channeling total 2000s grunge energy with this boxy, faded graphic tee. I grabbed it on depop for $24 to anchor these effortless, volume-heavy streetwear looks. 🖤 #streetwear
+3. Living in this slightly boxy vintage-style graphic tee and heavy combat boots for an effortless grunge streetwear look. Picked up this 100% cotton piece on depop for $24 to anchor all my baggy denim. 🖤 #thrifted
+4. Leaning all the way into grunge vibes today with this boxy graphic tee and heavy black combat boots. I picked up this 2003 tour bootleg style piece on depop for $24, and the worn-in cotton makes it look genuinely vintage. 🖤 #Streetwear
+5. Channeling peak 2003 grunge energy with this boxy, faded graphic tee. It’s got that perfectly worn-in feel that anchors any effortless streetwear look, whether paired with baggy dark wash denim or layered under a jacket. I grabbed this on depop for $24. 🖤 #thrifted
+```
+
+**Did it help, and how do I know:** Yes on the criterion, and only partly on the actual problem. Revised criterion 4 went from MISSED (3 of 5 open "scored this") to MET (no two-word opener more than once), and (a)–(c) held at 5 of 5, so making the card less templated didn't cost the price or the platform. Across all 45 cards the "scored" opener is gone completely.
+
+But reading the five cards, I'd call it a template that **moved**, not one that went away. 3 of the 5 still start with the same *word*, "Channeling", and they only pass because the second word changes (ultimate / total / peak). Across the whole run "channeling" opens 14 of 45 cards. The acquisition line I told it not to open with is now the stock *second* sentence: "grabbed" is in 26 of 45 cards ("I grabbed this … on depop for $24"). My revised criterion counts the first two words, so it can't see either of those. I set that measure before this run and I'm not changing it after seeing the result, but on a first-word count the same five cards would miss (3 of 5).
 
 
 ---

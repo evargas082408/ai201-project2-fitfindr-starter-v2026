@@ -318,9 +318,12 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
         f"How it'll be styled:\n{outfit}\n\n"
         "Write the caption for an Instagram/TikTok post about this thrift find. "
         "2 to 4 sentences, under 60 words, casual first person, like a real "
-        "post — not a product description. Mention the item, the price written "
+        "post — not a product description. Open with the outfit or the vibe, "
+        "not with how you got it: don't start with 'Scored', 'Found', "
+        "'Snagged', 'Got' or 'Just'. Mention the item, the price written "
         f"exactly as {price_text}, and the platform ({new_item.get('platform')}) "
-        "once each. Be specific about the vibe. At most two emoji and two "
+        "once each, with the price and platform in a later sentence, not the "
+        "first. Be specific about the vibe. At most two emoji and two "
         "hashtags. Return only the caption."
     )
     reply = generate(prompt, system=_STYLIST).strip()

@@ -1,0 +1,44 @@
+| Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1. Matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. Impossible query stops before tool 2 | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. Searched item is the item every later tool gets | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. Fit card is postable and not a template | 4 of 5 + 4 different first sentences | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. Query's price and size parsed and respected | 4 of 5 queries | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+
+Criterion 1: MET (5/5)
+  try 1: PASS — 3 tools, fit card returned
+  try 2: PASS — 3 tools, fit card returned
+  try 3: PASS — 3 tools, fit card returned
+  try 4: PASS — 3 tools, fit card returned
+  try 5: PASS — 3 tools, fit card returned
+
+Criterion 2: MET (5/5)
+  try 1: PASS — stopped after search, names a change
+  try 2: PASS — stopped after search, names a change
+  try 3: PASS — stopped after search, names a change
+  try 4: PASS — stopped after search, names a change
+  try 5: PASS — stopped after search, names a change
+
+Criterion 3: MET (5/5)
+  try 1: PASS — all four are lst_007
+  try 2: PASS — all four are lst_007
+  try 3: PASS — all four are lst_007
+  try 4: PASS — all four are lst_007
+  try 5: PASS — all four are lst_007
+
+Criterion 4: MET (5/5)
+  try 1: PASS — $24, depop, 37 words
+  try 2: PASS — $24, depop, 27 words
+  try 3: PASS — $24, depop, 36 words
+  try 4: PASS — $24, depop, 42 words
+  try 5: PASS — $24, depop, 44 words
+  5 different first sentences; opening words: 'channeling ultimate', 'channeling total', 'living in', 'leaning all', 'channeling peak'
+  revised criterion 4: 1 of 5 open with 'channeling ultimate' (allowed: 2) — MET
+
+Criterion 5: MET (5/5)
+  try 1: PASS — 'vintage graphic tee under $30': 5/5 runs — parsed right, 6 results all inside the limits
+  try 2: PASS — '90s track jacket in size M': 5/5 runs — parsed right, 2 results all inside the limits
+  try 3: PASS — 'platform sneakers size 8': 5/5 runs — parsed right, 1 results all inside the limits
+  try 4: PASS — 'denim jacket for less than 50 dollars': 5/5 runs — parsed right, 1 results all inside the limits
+  try 5: PASS — 'chunky cardigan, size medium, max $40': 5/5 runs — parsed right, 1 results all inside the limits
