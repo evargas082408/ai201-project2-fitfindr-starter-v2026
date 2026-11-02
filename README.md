@@ -363,14 +363,22 @@ Criterion 5, try 1 of each query. `parsed` is `agent.py::parse_query`, results a
 
 | # | Criterion | Target | Verdict | How I decided |
 |---|---|---|---|---|
-| 1 |  |  |  |  |
-| 2 |  |  |  |  |
-| 3 |  |  |  |  |
-| 4 |  |  |  |  |
-| 5 |  |  |  |  |
+| 1 | A matching query completes all three tools | 4 of 5 | **MET (5/5)** | All five tries called `search_listings` → `suggest_outfit` → `create_fit_card` in that order and came back with a real caption, not one of the fallback strings. 5 ≥ 4. |
+| 2 | An impossible query stops before the second tool | 5 of 5 | **MET (5/5)** | Every try's `tool_calls` held only `search_listings`, `outfit_suggestion` and `fit_card` stayed `None`, and the message said "Try other words" with example keywords, one of the three things the criterion counts as naming a change. |
+| 3 | The searched item is the item every later tool receives | 5 of 5 | **MET (5/5)** | In all five tries `selected_item`, `search_results[0]` and the ids `tool_calls` recorded for both model tools were all `lst_007`. |
+| 4 | The fit card is postable and not a template | 4 of 5 with $ price, platform, ≤ 80 words, + 4 different first sentences | **MET as written (5/5, 5 different first sentences). MISSED under the unit 4 revision: 3 of 5 open "Scored this"** | Every card had `$24`, `depop` and 31–50 words, so (a)–(c) passed 5 of 5. The first sentences were all technically different, so the original line passes. But the original line was broken (see the revision in [criteria.md](criteria.md)): it can't catch the template it was written to catch. Read plainly, three cards opening with the same two words is a template, so I'm treating 4 as a miss and diagnosing it. |
+| 5 | The query's price and size are parsed and respected | 4 of 5 queries | **MET (5/5)** | All five queries parsed to exactly the stated `max_price`/`size` with `None` for the other, and no result broke a limit, in 25 of 25 runs. |
 
 **Diagnoses**
 
+**Criterion 4 (revised): the fit card is a template.** 3 of the 5 cards opened "Scored this". It isn't just those five: across all 45 fit cards in the whole before run, 36 opened with a "scored" variant ("scored this" 23, "just scored" 10, "scored these" 3) and the other 9 with "found this/these" or "snagged this". Not one of 45 opened any other way, on five different items.
+
+- **Where:** the model's output, from `tools.py::create_fit_card`, step [5] in the trace. The tool did what its spec says and the loop handed it the right thing. The trace shows `new_item=lst_006` going in, the same id `select` picked.
+- **Mechanism:** my prompt. It asks for *"the item, the price written exactly as $24, and the platform (depop) once each"*. The shortest way to tick all three is one stock sentence, "Scored this [item] on [platform] for $[price]", which is how thrift captions open everywhere the model has read them. Every one of the 45 first sentences has the item, the platform *and* the price packed into it. So the checklist I wrote to pass (a) and (b) is the same thing that produces the template. Temperature 0.9 changes the words after the opener, not the opener.
+
+**The pattern:** this is one problem, not several. Every scenario that reached step 5 shows it, on `lst_006`, `lst_007`, `lst_004`, `lst_019` and `lst_008`, so it's the prompt, not the item.
+
+**Were my other targets too low?** Honestly, partly. Criteria 2, 3 and 5 test code with no randomness in it (a branch, my own bookkeeping, and a regex + filter), so once the code was right, 5 of 5 was the expected result. They're worth keeping because they'd catch a regression, but they were never going to tell me much about the model. The one I'd tighten is **criterion 1**: I allowed one miss in five for a model failure, and 45 of 45 model-backed runs in this test finished. It should be 5 of 5. And **criterion 5 only checks the limits, not relevance**: `90s track jacket in size M` also returned the 90s Leather Bomber, and `vintage graphic tee under $30` returned a crewneck sweatshirt and a mesh top. All inside the limits, so it passes. The first result is always the right one, so the agent never picked a wrong item, but a criterion about what else comes back would have caught it.
 
 
 ---

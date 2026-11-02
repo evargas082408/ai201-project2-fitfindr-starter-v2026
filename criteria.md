@@ -89,6 +89,19 @@ rather than 5 of 5 because at temperature 0.9 the model sometimes paraphrases
 ("under twenty-five bucks") or drops the platform even when the prompt asks for
 it, and I'm only controlling that through the prompt.
 
+> **Revised in unit 4:** Running `vintage graphic tee under $30` five times
+> with the cache off, at least 4 of the 5 fit cards meet (a), (b) and (c)
+> above, **and no more than 2 of the 5 cards open with the same first two
+> words** (case-insensitive, punctuation ignored).
+>
+> **Why revised:** "at least 4 different first sentences" couldn't catch the
+> template it was there to catch. In the before run all 5 first sentences were
+> different, so it passed, but 3 of them opened "Scored this" and the other two
+> "Found this" and "Just scored". They differed by a word or two *after* the
+> same opening. The template lives in the first two words, so that's what I
+> count now. This is stricter than the original, not looser: the same five
+> cards pass the old line and miss the new one.
+
 
 ---
 
