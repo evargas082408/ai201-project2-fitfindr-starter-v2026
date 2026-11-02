@@ -48,6 +48,7 @@ def new_session(query: str, wardrobe: dict) -> dict:
         "fit_card": None,            # what create_fit_card returned
         "error": None,               # set when the run ended early
         "tool_calls": [],            # {"tool", "item_id"} per call, in order
+        "notice": None,              # set when the run finished but the user should know something
     }
 
 
@@ -115,44 +116,93 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     # fork is after search: results → select, nothing → explain and stop.
     next_step = "parse"
     count = 0
-    while next_step != "done":
-        count += 1
-        trace.check_iterations(count)
+    try:
+        while next_step != "done":
+            count += 1
+            trace.check_iterations(count)
 
-        if next_step == "parse":
-            session["parsed"] = parse_query(query)
-            next_step = "search"
+            if next_step == "parse":
+                session["parsed"] = parse_query(query)
+                trace.step("parse_query", inputs=query, returned=_filters(session["parsed"]),
+                           note="regex, no model call")
+                next_step = "search"
 
-        elif next_step == "search":
-            p = session["parsed"]
-            _log_call(session, "search_listings", None)
-            session["search_results"] = search_listings(
-                p["description"], p["size"], p["max_price"]
-            )
-            # THE BRANCH: an empty list never reaches suggest_outfit.
-            next_step = "select" if session["search_results"] else "explain_empty"
+            elif next_step == "search":
+                p = session["parsed"]
+                _log_call(session, "search_listings", None)
+                session["search_results"] = search_listings(
+                    p["description"], p["size"], p["max_price"]
+                )
+                # THE BRANCH: an empty list never reaches suggest_outfit.
+                found = len(session["search_results"])
+                next_step = "select" if found else "explain_empty"
+                trace.step("search_listings (via MCP)", inputs=_filters(p),
+                           returned=session["search_results"],
+                           note=f"branch: {found} results → select" if found
+                           else "branch: empty → explain_empty, suggest_outfit is skipped")
 
-        elif next_step == "explain_empty":
-            session["error"] = explain_empty(session["parsed"])
-            next_step = "done"
+            elif next_step == "explain_empty":
+                session["error"] = explain_empty(session["parsed"])
+                trace.step("explain_empty", inputs="re-search via MCP with filters dropped, to find which one emptied it",
+                           returned=session["error"],
+                           note="stop: outfit_suggestion and fit_card stay None")
+                next_step = "done"
 
-        elif next_step == "select":
-            session["selected_item"] = session["search_results"][0]
-            next_step = "suggest"
+            elif next_step == "select":
+                session["selected_item"] = session["search_results"][0]
+                trace.step("select", inputs=f"{len(session['search_results'])} results",
+                           returned=session["selected_item"],
+                           note=f"took search_results[0], id {session['selected_item']['id']}")
+                next_step = "suggest"
 
-        elif next_step == "suggest":
-            item = session["selected_item"]
-            _log_call(session, "suggest_outfit", item)
-            session["outfit_suggestion"] = suggest_outfit(item, session["wardrobe"])
-            next_step = "card"
+            elif next_step == "suggest":
+                item = session["selected_item"]
+                _log_call(session, "suggest_outfit", item)
+                session["outfit_suggestion"] = suggest_outfit(item, session["wardrobe"])
+                owned = len((session["wardrobe"] or {}).get("items") or [])
+                if not owned:
+                    session["notice"] = (
+                        "Your wardrobe is empty, so that outfit is general advice, "
+                        "not pieces you own. Add a few things you already wear to "
+                        "your wardrobe to get outfits built from them."
+                    )
+                trace.step("suggest_outfit", inputs=f"new_item={item['id']}, wardrobe={owned} items",
+                           returned=session["outfit_suggestion"],
+                           note="empty wardrobe: general advice, notice set" if not owned else "")
+                next_step = "card"
 
-        elif next_step == "card":
-            item = session["selected_item"]
-            _log_call(session, "create_fit_card", item)
-            session["fit_card"] = create_fit_card(session["outfit_suggestion"], item)
-            next_step = "done"
+            elif next_step == "card":
+                item = session["selected_item"]
+                _log_call(session, "create_fit_card", item)
+                session["fit_card"] = create_fit_card(session["outfit_suggestion"], item)
+                trace.step("create_fit_card",
+                           inputs=f"outfit ({len(session['outfit_suggestion'])} chars), new_item={item['id']}",
+                           returned=session["fit_card"], note="done")
+                next_step = "done"
+
+    except ModelUnavailable as exc:
+        # A bad key or no network. Keep what search found and say what to do,
+        # instead of losing the whole run to a stack trace.
+        session["error"] = model_down(session["selected_item"], exc)
+        trace.step("ModelUnavailable", inputs=f"during step '{next_step}'",
+                   returned=str(exc), note="stop: outfit_suggestion and fit_card stay None")
 
     return session
+
+
+def _filters(parsed: dict) -> str:
+    """The parsed query as one readable line for the trace."""
+    return (f"description={parsed['description']!r}, size={parsed['size']!r}, "
+            f"max_price={parsed['max_price']!r}")
+
+
+def model_down(item: dict | None, exc: Exception) -> str:
+    """The message when the model can't be reached partway through a run."""
+    if not item:
+        return f"Couldn't reach the model. {exc}"
+    return (f"Found {item['title']} for ${item['price']:g} on {item['platform']}, "
+            f"but couldn't reach the model to style it or write the fit card. "
+            f"{exc} Once that's fixed, ask again to get the outfit and fit card.")
 
 
 def search_listings(description: str, size: str | None = None,

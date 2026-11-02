@@ -330,17 +330,118 @@ that produced it:
      the same length, your branch isn't working — and this is the fastest way
      anyone will ever find that out. -->
 
+`trace.step()` is called once per step inside `agent.py::run_agent`, with the step name, what went in and what came back. Step 2 is the MCP call. Both runs below were with the cache off (`AI201_CACHE=0`), so the two model calls are real.
+
 **Happy path**
 
 ```
+$ python app.py ask 'vintage graphic tee under $30, size M' --trace
+[1] parse_query
+      in:  vintage graphic tee under $30, size M
+      out: description='vintage graphic tee', size='M', max_price=30.0
+      →    regex, no model call
+[2] search_listings (via MCP)
+      in:  description='vintage graphic tee', size='M', max_price=30.0
+      out: 2 items: Y2K Baby Tee — Butterfly Print, Mesh Long-Sleeve Top — Black
+      →    branch: 2 results → select
+[3] select
+      in:  2 results
+      out: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+      →    took search_results[0], id lst_002
+[4] suggest_outfit
+      in:  new_item=lst_002, wardrobe=10 items
+      out: Outfit 1: Y2K Baby Tee — Butterfly Print paired with Baggy straight-leg jeans, dark wash, Vintage black denim …
+[5] create_fit_card
+      in:  outfit (466 chars), new_item=lst_002
+      out: Scored this Y2K butterfly baby tee on depop for just $18 and I’m obsessed with the fitted crop vibe. It looks …
+      →    done
 
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+
+  Outfit:   Outfit 1: Y2K Baby Tee — Butterfly Print paired with Baggy straight-leg jeans, dark wash, Vintage black denim jacket, and Chunky white sneakers.
+Outfit 2: Y2K Baby Tee — Butterfly Print paired with Wide-leg khaki trousers, Black cropped zip hoodie, and Black combat boots.
+These combinations work because the cropped, fitted silhouette of the baby tee balances the volume of the baggy bottoms, while the layered outerwear and footwear tie the Y2K aesthetic together.
+
+  Fit card: Scored this Y2K butterfly baby tee on depop for just $18 and I’m obsessed with the fitted crop vibe. It looks so good styled with baggy denim or wide-leg trousers for that early 2000s look. 🦋✨ #y2kstyle #thriftfinds
+
+2 model calls this session, 669 prompt + 166 output tokens
 ```
+
+Why each step: search ran because parsing found a description; it went to `select` because the list wasn't empty; `select` took `search_results[0]` because search already sorts best match first; `suggest_outfit` and `create_fit_card` were both handed `lst_002`, the same id `select` picked.
 
 **Empty search**
 
 ```
+$ python app.py ask 'designer ballgown size XXS under $5' --trace
+[1] parse_query
+      in:  designer ballgown size XXS under $5
+      out: description='designer ballgown', size='XXS', max_price=5.0
+      →    regex, no model call
+[2] search_listings (via MCP)
+      in:  description='designer ballgown', size='XXS', max_price=5.0
+      out: [] (empty)
+      →    branch: empty → explain_empty, suggest_outfit is skipped
+[3] explain_empty
+      in:  re-search via MCP with filters dropped, to find which one emptied it
+      out: Nothing in the listings matches 'designer ballgown' in size XXS under $5. No item matches those words at any s…
+      →    stop: outfit_suggestion and fit_card stay None
+
+  Nothing in the listings matches 'designer ballgown' in size XXS under $5. No item matches those words at any size or price, so changing the size or budget won't help. Try other words: name the kind of item (tee, jacket, jeans, sneakers, cardigan) or a style (vintage, y2k, grunge, cottagecore, 90s).
+
+0 model calls this session
+```
+
+Three steps instead of five, and 0 model calls. The branch is doing its job.
+
+**The three failures, triggered on purpose**
+
+| Failure | How I triggered it | What it said before I touched it | Handler I added |
+|---|---|---|---|
+| Empty search | `python app.py ask 'neon ski suit size XXS under $5'` | *"Nothing in the listings matches 'neon ski suit' in size XXS under $5. No item matches those words at any size or price, so changing the size or budget won't help. Try other words: …"* | None needed. The unit 3 branch already stops and names what to change. |
+| Empty wardrobe | `python app.py ask 'chunky cardigan under $40' --empty-wardrobe` | General styling advice ("Pair this earth-tone brown chunky knit cardigan with high-waisted, straight-leg cream denim…") and a fit card. No crash, not empty, but nothing told the user *why* the outfit was generic. | `run_agent` sets a new `session["notice"]` when the wardrobe has no items, and `app.py` prints it under the fit card. |
+| Model unavailable | Changed one character of `GEMINI_API_KEY` in `.env`, asked `'velvet blazer in emerald green'` (never asked before, so not cached) | `ModelUnavailable: The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.google.com.` with exit code 1. That's `app.py`'s catch-all, not my agent. The blazer search had already worked and the user never saw it, and in `run_eval.py` the run would have been logged as a crash. | `run_agent` catches `ModelUnavailable`, keeps the session, writes the message into `session["error"]` and adds a `ModelUnavailable` trace step. |
+
+What each one says now:
 
 ```
+$ python app.py ask 'chunky cardigan under $40' --empty-wardrobe
+(running with an empty wardrobe)
+
+  Found:    Knit Cardigan — Chunky Brown — $35.0 on depop
+
+  Outfit:   Pair this chunky brown cardigan with straight-leg light wash denim and a fitted cream ribbed turtleneck for a cozy earth-tone look. Alternatively, style it over a floral midi slip dress in olive or rust with brown leather ankle boots for a cottagecore vibe. Lean into textures like corduroy and suede. Colors like cream, olive, tan, and rust complement the brown knit. The overall aesthetic is warm, casual, and relaxed.
+
+  Fit card: Found this chunky brown knit on depop for $35 and it is literally the coziest cottagecore layer for fall. I’m living for these earth tones and throwing it over everything from denim to slip dresses. 🍂
+
+#thriftfinds
+
+  Note:     Your wardrobe is empty, so that outfit is general advice, not pieces you own. Add a few things you already wear to your wardrobe to get outfits built from them.
+
+2 model calls this session, 505 prompt + 137 output tokens
+```
+
+```
+$ python app.py ask 'olive shacket under $40'        (one character of the key changed)
+
+  Found Shacket — Olive Canvas for $33 on poshmark, but couldn't reach the model to style it or write the fit card. The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.google.com. Once that's fixed, ask again to get the outfit and fit card.
+
+1 model calls this session
+```
+
+And the trace for the bad-key run, so you can see where it stopped:
+
+```
+[3] select
+      in:  1 results
+      out: Velvet Blazer — Emerald Green ($52.0, depop)
+      →    took search_results[0], id lst_036
+[4] ModelUnavailable
+      in:  during step 'suggest'
+      out: The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.goo…
+      →    stop: outfit_suggestion and fit_card stay None
+```
+
+Key put back afterwards, and `python test.py` passes 10 of 10 again.
 
 **On the MCP move:** <!-- what changed in your code, and whether anything
 behaved differently afterwards. If the rewire didn't work, say exactly where it
