@@ -17,8 +17,9 @@ import re
 
 import config
 import trace
-from tools import search_listings, suggest_outfit, create_fit_card, normalize_size
+from tools import suggest_outfit, create_fit_card, normalize_size
 from generate import ModelUnavailable
+from mcp_client import call_tool
 
 
 # ── session state ─────────────────────────────────────────────────────────────
@@ -152,6 +153,20 @@ def run_agent(query: str, wardrobe: dict) -> dict:
             next_step = "done"
 
     return session
+
+
+def search_listings(description: str, size: str | None = None,
+                    max_price: float | None = None) -> list[dict]:
+    """
+    Tool 1, called through the MCP server in mcp_server.py instead of
+    imported from tools.py. Same inputs, same list back. The loop and
+    explain_empty both search through here.
+    """
+    return call_tool("search_listings", {
+        "description": description,
+        "size": size,
+        "max_price": max_price,
+    })
 
 
 def _log_call(session: dict, tool: str, item: dict | None) -> None:

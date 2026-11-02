@@ -59,7 +59,7 @@ works with a direct call, and **a documented failure earns the point in full.**
 
 from mcp.server.fastmcp import FastMCP
 
-from tools import search_listings as _search_listings_impl  # noqa: F401 — you'll use this below
+from tools import search_listings as _search_listings_impl
 
 # log_level="WARNING" keeps the server from printing an INFO line for every
 # request. Without it your terminal fills with "Processing request of type
@@ -67,23 +67,32 @@ from tools import search_listings as _search_listings_impl  # noqa: F401 — you
 mcp = FastMCP("fitfindr", log_level="WARNING")
 
 
-# ── TODO: uncomment and fill this in ──────────────────────────────────────────
-#
-# @mcp.tool()
-# def search_listings(
-#     description: str,
-#     size: str | None = None,
-#     max_price: float | None = None,
-# ) -> list[dict]:
-#     """
-#     <-- YOUR DESCRIPTION GOES HERE.
-#
-#         One or two sentences. What does this tool do, what does it need, and
-#         what does it give back when it finds nothing? Written for a reader
-#         who cannot see the code.
-#     """
-#     return _search_listings_impl(description, size, max_price)
-#
+@mcp.tool()
+def search_listings(
+    description: str,
+    size: str | None = None,
+    max_price: float | None = None,
+) -> list[dict]:
+    """
+    Search 40 secondhand clothing listings (Depop, thredUp, Poshmark) by
+    keywords, with an optional size and an optional price ceiling.
+
+    description: keywords for the item, e.g. "vintage graphic tee". A listing
+        has to match at least two-thirds of them (rounded up).
+    size: one size, e.g. "M", "8" (US shoe) or "W30" (jeans waist), or null for
+        any size. Exact match per size, so "M" matches "S/M" but "L" does not
+        match "XL". "One Size" listings match any size.
+    max_price: inclusive ceiling in US dollars (e.g. 30 or 29.99), or null for
+        no ceiling.
+
+    Returns up to 10 listings, best keyword match first. Each listing has id,
+    title, description, category, style_tags (list), size, condition, price
+    (number, US dollars), colors (list), brand (string or null, usually null)
+    and platform. When nothing matches, returns an empty list, never an error.
+    """
+    return _search_listings_impl(description, size, max_price)
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 #
 # Two notes on the block above.
