@@ -231,7 +231,7 @@ Different words every time, and all three have the price and platform, but all t
      "I gave Claude my search_listings spec. It returned None on no match
      instead of an empty list, so I changed it" is the level we want. -->
 
-The course allowed full AI use on this project. I used Claude Code as a coding agent: it read the starter and the data, wrote the specs, criteria and code with me, and ran every test above. I also used the project's own model (Gemini, through `generate()`) as the "attacker" the brief describes. Three specific moments:
+The course allowed full AI use on this project. I used Claude Code as a coding agent: it read the starter and the data, wrote the specs, criteria and code with me, and ran every test in this README. I also used the project's own model (Gemini, through `generate()`) as the "attacker" the brief describes. Three specific moments:
 
 **Moment 1: attacking the criteria**
 
@@ -250,6 +250,20 @@ The course allowed full AI use on this project. I used Claude Code as a coding a
 - *What I asked for:* I pasted the ballgown message into the model with the brief's prompt: *"I know nothing about how the app works. Tell me what I would try next after reading it."*
 - *What came back:* Its first suggestion was right (change the words), but it also said I'd "likely need to change your size (XXS) or price (< $5)". My message had said the words matched nothing "at any size or price", and the model still didn't take from that that size and price weren't the problem.
 - *What I changed:* I rewrote that sentence in `agent.py::explain_empty` to say it outright: *"No item matches those words at any size or price, so changing the size or budget won't help."*
+
+**Unit 4.** Same setup: Claude Code did the MCP registration, the handlers, the trace calls, the scenarios, both eval runs, and `check_criteria.py`, which is my criteria written as code so every try gets scored the same way. Gemini, through `generate()`, played the outside reader again. Two moments from this unit:
+
+**Moment 4: the three failure messages, read cold**
+
+- *What I asked for:* the brief's prompt, with all three messages pasted in: *"Here are three error messages from an app I'm using. For each one, tell me what I would try next as a user who can't see the code. If a message leaves me with nothing to try, say so. Don't rewrite them for me."*
+- *What came back:* Message 1 (empty search) it got right. For the empty wardrobe it said *"This message leaves you with nothing to try, because it successfully completed the task … and reported no errors."* So a user would never find out the outfit was generic. For the bad key it read *"the search part still works without it"* as "you can try searching again", which would just fail the same way.
+- *What I changed:* I added `session["notice"]`, which `app.py` prints under the fit card when the wardrobe is empty, telling the user to add pieces they own. I also changed the bad-key message to end with *"Once that's fixed, ask again to get the outfit and fit card."*
+
+**Moment 5: a criterion that passed when it shouldn't have**
+
+- *What I asked for:* after `check_criteria.py` marked all five criteria MET, I had Claude Code count the opening words of every fit card in the run, not just the five criterion 4 looks at.
+- *What came back:* 36 of 45 opened with a "scored" variant, and all 45 with "scored / just scored / found / snagged". Criterion 4 passed anyway, because it asked for "different first sentences" and these differed by a word or two after the same opener. Claude pointed out that this is the exact example the brief gives of a broken criterion.
+- *What I changed:* I revised criterion 4 in `criteria.md` under the original (stricter: no more than 2 of 5 cards with the same first two words), called it MISSED instead of taking the pass, and made the fit card opener my one improvement. Then the after-run showed the template had moved to "Channeling…" and "I grabbed this…". I reported that too, rather than re-measuring it until it looked good.
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
@@ -513,6 +527,10 @@ behaved differently afterwards. If the rewire didn't work, say exactly where it
 broke — the error text and the last thing that worked. That earns the point in
 full. -->
 
+`mcp_server.py` registers `search_listings` with a description written for an agent that can't see my code: units (US dollars), the size rule with examples, the result fields, and the empty case ("returns an empty list, never an error"). `python mcp_client.py` lists it with `description: string`, `size: string (optional)` and `max_price: number (optional)`, which matches the Tool Inventory. In `agent.py` I added a `search_listings()` that calls `mcp_client.call_tool("search_listings", {...})`, and both the loop and `explain_empty` search through it. `tools.search_listings` itself didn't change.
+
+**Did anything behave differently?** The results didn't. Before wiring it in I ran six queries both ways, including the empty one: identical lists, same types (prices stayed floats, `brand` stayed `None`), nothing came back as a string. The unit 3 sample query even came back from the build cache through MCP, which can only happen if the item dict that reached the model prompts was byte-for-byte the same. What changed is speed. Every call starts a new server process, about 4 s each (13 s the very first time), so a normal query is about 4 s slower and the empty path, which re-searches 2–4 times, takes about 10 s.
+
 
 
 ---
@@ -585,6 +603,12 @@ But reading the five cards, I'd call it a template that **moved**, not one that 
      you did. "I ran out of time" is fine if it's true. Pretending nothing is
      left is not. -->
 
+No criterion is MISSED against its written target after the change. That doesn't mean nothing's broken:
+
+1. **The fit card template moved instead of leaving (criterion 4).** 3 of 5 cards open with "Channeling", and "I grabbed this … on depop for $24" is now the stock second sentence (26 of 45 cards). What I'd do next: stop leaving variety to temperature. Have `create_fit_card` pick an opening angle in code for each call (the outfit, one detail of the item, where you'd wear it, the price as the punchline) and put that one angle in the prompt. I'd also measure it on the first *word*, not the first two. Why I stopped: the unit allows one change, and a second prompt edit on top of the first would make the two impossible to tell apart in the run log.
+2. **Criterion 1 is looser than the data says it needs to be.** I allowed one miss in five for a model failure, and 90 of 90 model-backed runs across both tests finished. Next round I'd set it at 5 of 5. I didn't revise it, because a revision is for a criterion that can't be measured, and this one measures fine. It's just easy.
+3. **Search lets in the wrong kind of item.** The two-thirds keyword rule means `90s track jacket` also returns the 90s Leather Bomber, and `vintage graphic tee` returns a crewneck sweatshirt and a mesh top whose *description* mentions a graphic tee. The best match is always first, so the agent never picked a wrong item in 50 tries, but none of my criteria look past `search_results[0]`. What I'd do: require the garment word (tee, jacket, jeans…) to match the title or category, not just the description. Why I stopped: it isn't one of my five, and it would be a second change.
+4. **MCP is slow and has no handler of its own.** Every `call_tool` starts a fresh server, about 4 s, and the empty path searches 2–4 times to work out which filter emptied it, so an impossible query now takes about 10 s. I'd hold one connection open for the whole run. And if `mcp_server.py` won't start, the `MCPError` isn't caught in `run_agent`. It falls through to `app.py`'s catch-all, which prints a readable message but loses the session. It wasn't one of the three failure modes, so I left it.
 
 
 <!-- ═════════════════════════════════════════════════════════════════════
